@@ -1,0 +1,96 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  # group + plural name combine into the full API path Kubernetes exposes,
+  # e.g. autoscaling.predictive-operator.dev/v1alpha1/predictivescalers
+  name: predictivescalers.autoscaling.predictive-operator.dev
+spec:
+  group: autoscaling.predictive-operator.dev
+  names:
+    kind: PredictiveScaler
+    plural: predictivescalers
+    singular: predictivescaler
+    shortNames:
+      - pscaler
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        # gives us a separate `status` block, writable only by the controller,
+        # not by whoever created the object. Kubernetes convention: spec = what you want
+        # status = what's actually happening.
+        status: {}
+      additionalPrinterColumns:
+        - name: Target
+          type: string
+          jsonPath: .spec.targetDeployment
+        - name: Replicas
+          type: integer
+          jsonPath: .status.desiredReplicas
+        - name: Fallback
+          type: boolean
+          jsonPath: .status.fallbackActive
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - targetDeployment
+                - minReplicas
+                - maxReplicas
+                - metricQuery
+                - requestsPerReplica
+              properties:
+                targetDeployment:
+                  type: string
+                  description: Name of the Deployment this scaler controls.
+                minReplicas:
+                  type: integer
+                  minimum: 1
+                maxReplicas:
+                  type: integer
+                  minimum: 1
+                metricQuery:
+                  type: string
+                  description: PromQL query returning current load (e.g. request rate) for the target.
+                forecastHorizonSeconds:
+                  type: integer
+                  minimum: 30
+                  default: 300
+                requestsPerReplica:
+                  type: number
+                  description: Rough capacity of one replica, used to convert a forecasted load into a replica count.
+                confidenceThreshold:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0.6
+                  description: Minimum model confidence required to trust the forecast; below this, fall back to reactive scaling.
+                syncPeriodSeconds:
+                  type: integer
+                  minimum: 10
+                  default: 30
+              x-kubernetes-validations:
+                - rule: "self.maxReplicas >= self.minReplicas"
+                  message: "maxReplicas must be greater than or equal to minReplicas"
+            status:
+              type: object
+              properties:
+                currentForecast:
+                  type: number
+                confidence:
+                  type: number
+                desiredReplicas:
+                  type: integer
+                fallbackActive:
+                  type: boolean
+                lastReconcileTime:
+                  type: string
+                  format: date-time
