@@ -40,6 +40,4 @@ class PredictiveScalerStatus(BaseModel):
         self.last_reconcile_time = datetime.now(timezone.utc)
 
     def to_patch_dict(self) -> dict:
-        # Kopf expects plain camelCase dicts when patching .status, not our
-        # snake_case Python attribute names
         return self.model_dump(by_alias=True, exclude_none=True)
