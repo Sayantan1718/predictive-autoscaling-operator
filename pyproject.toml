@@ -1,0 +1,45 @@
+[project]
+name = "predictive-autoscaling-operator"
+version = "0.1.0"
+description = "Kubernetes operator that forecasts load and scales workloads ahead of demand"
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+license = { text = "MIT" }
+
+dependencies = [
+    "kopf==1.44.0",
+    # pinned below 36.0.0 on purpose: that release drops the Authorization header
+    # on load_incluster_config(), breaking every in-cluster API call
+    "kubernetes==35.0.0",
+    "pydantic==2.13.5",
+    "requests==2.34.2",
+    "statsmodels==0.15.1",
+    "numpy==2.5.1",
+    # staying on the 2.x line - pandas 3.0 is out but statsmodels' support for
+    # it isn't something we've verified, and this is a forecasting pipeline,
+    # not somewhere to find that out the hard way
+    "pandas==2.3.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.0",
+    "mypy==2.3.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/controller", "src/forecasting"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
