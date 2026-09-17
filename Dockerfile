@@ -7,4 +7,4 @@ COPY src/ src/
 
 RUN pip install --no-cache-dir .
 
-CMD ["kopf", "run", "--standalone", "-m", "controller.handlers"]
+CMD ["kopf", "run", "--standalone", "-A", "-m", "controller.handlers"]
