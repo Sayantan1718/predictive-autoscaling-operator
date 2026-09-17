@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: predictive-autoscaler
+  namespace: predictive-autoscaler-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: predictive-autoscaler
+rules:
+  # our own CRD - the controller needs to read specs and write status
+  - apiGroups: ["autoscaling.predictive-operator.dev"]
+    resources: ["predictivescalers", "predictivescalers/status"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+
+  # the actual thing we're scaling
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "watch", "patch"]
+
+  # kopf posts human-readable progress as Kubernetes Events (visible via
+  # `kubectl describe`) - this is what it needs to do that
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+  # kopf checks CRD definitions on startup to understand what it's watching
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: predictive-autoscaler
+subjects:
+  - kind: ServiceAccount
+    name: predictive-autoscaler
+    namespace: predictive-autoscaler-system
+roleRef:
+  kind: ClusterRole
+  name: predictive-autoscaler
+  apiGroup: rbac.authorization.k8s.io
