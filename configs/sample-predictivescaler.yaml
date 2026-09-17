@@ -1,0 +1,14 @@
+apiVersion: autoscaling.predictive-operator.dev/v1alpha1
+kind: PredictiveScaler
+metadata:
+  name: demo-app-scaler
+  namespace: default
+spec:
+  targetDeployment: demo-app
+  minReplicas: 1
+  maxReplicas: 10
+  metricQuery: 'rate(demo_app_requests_total[2m])'
+  requestsPerReplica: 5
+  forecastHorizonSeconds: 300  
+  confidenceThreshold: 0.6
+  syncPeriodSeconds: 30
