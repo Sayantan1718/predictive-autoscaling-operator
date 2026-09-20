@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predictive-autoscaler
+  namespace: predictive-autoscaler-system
+spec:
+  replicas: 1  # exactly one - see README for why running more isn't safe yet
+  selector:
+    matchLabels:
+      app: predictive-autoscaler
+  template:
+    metadata:
+      labels:
+        app: predictive-autoscaler
+    spec:
+      serviceAccountName: predictive-autoscaler
+      containers:
+        - name: operator
+          image: predictive-autoscaler:local  # built and loaded into kind, see README
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus-server.monitoring.svc:9090"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
