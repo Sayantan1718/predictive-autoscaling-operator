@@ -12,4 +12,4 @@ prometheus-pushgateway:
 
 server:
   persistentVolume:
-    enabled: false  # emptyDir is fine - this is a throwaway local demo cluster
+    enabled: false

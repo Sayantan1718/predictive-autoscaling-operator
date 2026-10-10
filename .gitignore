@@ -1,1 +1,31 @@
-venv/*
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# secrets and local cluster credentials
+.env
+.env.*
+*.kubeconfig
+kubeconfig*
+
+# editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# scratch space (load-tests/results is NOT ignored on purpose, the raw runs are the evidence)
+tmp/
+*.log
