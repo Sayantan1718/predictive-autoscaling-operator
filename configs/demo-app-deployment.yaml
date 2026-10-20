@@ -13,22 +13,24 @@ spec:
       labels:
         app: demo-app
       annotations:
-        # this is what makes the prometheus-community Helm chart's default
-        # scrape config pick this pod up automatically - no extra Prometheus
-        # config needed
+        # picked up by the default scrape config of the prometheus-community chart
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: demo-app
-          image: demo-app:local  # built and loaded into kind, see README
+          image: demo-app:local  # built and loaded into kind by scripts/setup.sh
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
+          env:
+            - name: WORK_MS
+              value: "20"
           resources:
+            # HPA utilization is measured against this request, so it matters for the baseline
             requests:
-              cpu: 50m
+              cpu: 100m
               memory: 64Mi
             limits:
               cpu: 250m

@@ -1,0 +1,3 @@
+# kind's kubelets use self-signed certs, which metrics-server rejects by default
+args:
+  - --kubelet-insecure-tls
