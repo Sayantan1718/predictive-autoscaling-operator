@@ -107,23 +107,30 @@ pip install -e ".[dev]"
 pytest
 ```
 
-The tests need no cluster. They cover spec validation (including `maxReplicas < minReplicas`), the replica math (clamping, rounding up, the low-confidence fallback), and forecaster edge cases (too little data, flat series, rising and falling trends).
+The tests need no cluster. They cover spec validation (including `maxReplicas < minReplicas`), the replica math (clamping, rounding up, the low-confidence fallback), forecaster edge cases (too little data, flat series, rising and falling trends), and the reconcile handler (a Prometheus outage or empty result leaves replicas untouched, and a healthy series scales).
 
 ## Load tests
 
 Two traffic profiles, generated with k6 against the demo app:
 
-- `ramp`: a steady climb from 2 to 40 requests per second, a hold, then a drop (15 minutes).
+- `ramp`: a steady climb from 2 to 30 requests per second, a hold, then a drop (15 minutes).
 - `daily`: a compressed 24 hour pattern, one "hour" per 60 seconds (24 minutes).
+
+The same profile is run against two controllers, one at a time: this operator, and a stock CPU-based HPA (`configs/hpa.yaml`, 80% target, default behavior).
 
 ```bash
 load-tests/run.sh ramp predictive
+load-tests/run.sh ramp hpa
 load-tests/run.sh daily predictive
+load-tests/run.sh daily hpa
 ```
 
-Each run resets the demo app to one replica, records replica counts and request rate every 5 seconds, and writes everything to `load-tests/results/<label>-<profile>-<timestamp>/`:
+For a fair comparison, each demo app request burns about 20 ms of CPU (22 ms measured including framework overhead), so CPU-based scaling has something to react to. The HPA target (80% of a 100m CPU request) and `requestsPerReplica: 3.5` both work out to roughly 3.5 requests per second per pod.
+
+Each run removes both controllers, resets the demo app to one replica, enables the chosen one, warms up for two minutes, then records replica counts and request rate every 5 seconds. Everything goes to `load-tests/results/<label>-<profile>-<timestamp>/`:
 
 - `replicas.csv`: spec replicas, ready replicas, observed requests per second over time
+- `run-info.txt`: label, profile, peak rate, k6 and Kubernetes versions
 - `k6-summary.json` and `k6-output.txt`: k6's own output
 
 ## Results
@@ -136,7 +143,7 @@ Raw output from every run is committed under `load-tests/results/` so the number
 
 - **Trend only, no seasonality.** The model extrapolates recent momentum. It can lead a steady climb, but it cannot anticipate a sudden spike it has never seen. Seasonal terms need days of history to learn.
 - **No cooldown window.** Replica counts can move up and down between syncs. The HPA's stabilization window has no equivalent here yet.
-- **Prometheus outage scales down.** If the query fails, there are no data points, the load is treated as zero, and the operator scales to `minReplicas`.
+- **No metrics, no scaling.** If Prometheus is unreachable, returns an error, or returns no data, the operator logs a warning and leaves the replica count where it is. It does not scale down on missing data, but it also can't scale up until metrics come back.
 - **Confidence is a heuristic**, as described above.
 - **One operator replica.** It runs with `--standalone`, with no leader election, so running two copies would make them fight over the same objects.
 - **Namespace-local targets.** `targetDeployment` is looked up in the `PredictiveScaler`'s own namespace.
@@ -146,7 +153,7 @@ Raw output from every run is committed under `load-tests/results/` so the number
 All versions are pinned in `pyproject.toml`. Two are deliberate:
 
 - `kubernetes==35.0.0`: version 36.0.0 was reported to drop the `Authorization` header when using `load_incluster_config()`, which breaks every in-cluster API call ([kubernetes-client/python#2591](https://github.com/kubernetes-client/python/issues/2591)).
-- `pandas==2.3.3`: staying on the 2.x line rather than moving to 3.0 for the time being.
+- `pandas==2.3.3`: staying on the 2.x line.
 
 ## Project layout
 
