@@ -13,7 +13,7 @@ dependencies = [
     "kubernetes==35.0.0",
     "pydantic==2.13.5",
     "requests==2.34.2",
-    "statsmodels==0.15.1",
+    "statsmodels==0.15.0",
     "numpy==2.5.1",
     # staying on the 2.x line - pandas 3.0 is out but statsmodels' support for
     # it isn't something we've verified, and this is a forecasting pipeline,

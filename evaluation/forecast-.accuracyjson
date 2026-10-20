@@ -1,0 +1,205 @@
+{
+  "config": {
+    "peak_rps": 30,
+    "seeds": 20,
+    "step_seconds": 15,
+    "horizons_seconds": [
+      30,
+      60,
+      120,
+      300
+    ],
+    "sync_seconds": 30,
+    "warmup_seconds": 120,
+    "confidence_threshold": 0.6,
+    "statsmodels": "0.15.0",
+    "numpy": "2.5.1",
+    "pandas": "2.3.3"
+  },
+  "results": [
+    {
+      "profile": "ramp",
+      "horizon_seconds": 30,
+      "origins_per_seed": 29,
+      "mae_rps": {
+        "persistence": {
+          "mean": 1.648,
+          "std": 0.036
+        },
+        "model": {
+          "mean": 0.838,
+          "std": 0.118
+        },
+        "operated": {
+          "mean": 0.822,
+          "std": 0.119
+        }
+      },
+      "trusted_fraction": {
+        "mean": 0.926,
+        "std": 0.013
+      }
+    },
+    {
+      "profile": "ramp",
+      "horizon_seconds": 60,
+      "origins_per_seed": 28,
+      "mae_rps": {
+        "persistence": {
+          "mean": 3.029,
+          "std": 0.066
+        },
+        "model": {
+          "mean": 1.909,
+          "std": 0.152
+        },
+        "operated": {
+          "mean": 1.869,
+          "std": 0.153
+        }
+      },
+      "trusted_fraction": {
+        "mean": 0.923,
+        "std": 0.013
+      }
+    },
+    {
+      "profile": "ramp",
+      "horizon_seconds": 120,
+      "origins_per_seed": 26,
+      "mae_rps": {
+        "persistence": {
+          "mean": 5.462,
+          "std": 0.113
+        },
+        "model": {
+          "mean": 3.598,
+          "std": 0.292
+        },
+        "operated": {
+          "mean": 3.548,
+          "std": 0.278
+        }
+      },
+      "trusted_fraction": {
+        "mean": 0.917,
+        "std": 0.014
+      }
+    },
+    {
+      "profile": "ramp",
+      "horizon_seconds": 300,
+      "origins_per_seed": 20,
+      "mae_rps": {
+        "persistence": {
+          "mean": 13.374,
+          "std": 0.196
+        },
+        "model": {
+          "mean": 10.012,
+          "std": 0.551
+        },
+        "operated": {
+          "mean": 10.314,
+          "std": 0.575
+        }
+      },
+      "trusted_fraction": {
+        "mean": 0.893,
+        "std": 0.018
+      }
+    },
+    {
+      "profile": "daily",
+      "horizon_seconds": 30,
+      "origins_per_seed": 47,
+      "mae_rps": {
+        "persistence": {
+          "mean": 1.307,
+          "std": 0.045
+        },
+        "model": {
+          "mean": 0.705,
+          "std": 0.088
+        },
+        "operated": {
+          "mean": 0.706,
+          "std": 0.089
+        }
+      },
+      "trusted_fraction": {
+        "mean": 0.957,
+        "std": 0.0
+      }
+    },
+    {
+      "profile": "daily",
+      "horizon_seconds": 60,
+      "origins_per_seed": 46,
+      "mae_rps": {
+        "persistence": {
+          "mean": 2.5,
+          "std": 0.076
+        },
+        "model": {
+          "mean": 1.617,
+          "std": 0.145
+        },
+        "operated": {
+          "mean": 1.604,
+          "std": 0.142
+        }
+      },
+      "trusted_fraction": {
+        "mean": 0.957,
+        "std": 0.0
+      }
+    },
+    {
+      "profile": "daily",
+      "horizon_seconds": 120,
+      "origins_per_seed": 44,
+      "mae_rps": {
+        "persistence": {
+          "mean": 4.703,
+          "std": 0.123
+        },
+        "model": {
+          "mean": 3.709,
+          "std": 0.238
+        },
+        "operated": {
+          "mean": 3.616,
+          "std": 0.237
+        }
+      },
+      "trusted_fraction": {
+        "mean": 0.955,
+        "std": 0.0
+      }
+    },
+    {
+      "profile": "daily",
+      "horizon_seconds": 300,
+      "origins_per_seed": 38,
+      "mae_rps": {
+        "persistence": {
+          "mean": 10.281,
+          "std": 0.184
+        },
+        "model": {
+          "mean": 12.595,
+          "std": 0.488
+        },
+        "operated": {
+          "mean": 12.352,
+          "std": 0.515
+        }
+      },
+      "trusted_fraction": {
+        "mean": 0.945,
+        "std": 0.008
+      }
+    }
+  ]
+}

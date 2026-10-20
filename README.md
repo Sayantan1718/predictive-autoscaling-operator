@@ -37,9 +37,9 @@ spec:
   targetDeployment: demo-app
   minReplicas: 1
   maxReplicas: 10
-  metricQuery: 'rate(demo_app_requests_total[2m])'
-  requestsPerReplica: 5
-  forecastHorizonSeconds: 300
+  metricQuery: 'sum(rate(demo_app_requests_total[1m]))'
+  requestsPerReplica: 3.5
+  forecastHorizonSeconds: 120
   confidenceThreshold: 0.6
   syncPeriodSeconds: 30
 ```
@@ -50,7 +50,7 @@ spec:
 | `minReplicas` / `maxReplicas` | Hard bounds on the replica count | required |
 | `metricQuery` | PromQL returning the load, e.g. requests per second | required |
 | `requestsPerReplica` | Load one replica can handle | required |
-| `forecastHorizonSeconds` | How far ahead to forecast (min 30) | 300 |
+| `forecastHorizonSeconds` | How far ahead to forecast (min 30). Set it near how long a new pod takes to become useful, not higher. | 300 |
 | `confidenceThreshold` | Below this, fall back to current load (0 to 1) | 0.6 |
 | `syncPeriodSeconds` | How often to re-evaluate (min 10) | 30 |
 
@@ -73,6 +73,7 @@ spec:
 - Docker, [kind](https://kind.sigs.k8s.io/), kubectl, Helm
 - [k6](https://grafana.com/docs/k6/) (load tests only)
 - Python 3.12 (running the tests)
+- A bash shell. On Windows, use Git Bash or WSL2; the scripts won't run in PowerShell.
 
 ## Quick start
 
@@ -133,6 +134,37 @@ Each run removes both controllers, resets the demo app to one replica, enables t
 - `run-info.txt`: label, profile, peak rate, k6 and Kubernetes versions
 - `k6-summary.json` and `k6-output.txt`: k6's own output
 
+## Forecast accuracy
+
+The forecaster was evaluated offline on synthetic traffic that mirrors the two k6 profiles. The traffic is turned into what `sum(rate(...[1m]))` would report (Poisson request counts per 15 second scrape, averaged over the last minute). At every 30 second sync tick the forecaster predicts the load some seconds ahead, and the prediction is compared with what the metric showed at that time. It is scored against "persistence", which simply uses the current value, since that is what a purely reactive scaler effectively assumes.
+
+Mean absolute error in requests per second, peak 30 rps, 20 seeds (mean, lower is better):
+
+| Profile | Horizon | Persistence | Model | Model vs persistence |
+|---|---|---|---|---|
+| ramp | 30s | 1.65 | 0.84 | -49% |
+| ramp | 60s | 3.03 | 1.91 | -37% |
+| ramp | 120s | 5.46 | 3.60 | -34% |
+| ramp | 300s | 13.37 | 10.01 | -25% |
+| daily | 30s | 1.31 | 0.70 | -46% |
+| daily | 60s | 2.50 | 1.62 | -35% |
+| daily | 120s | 4.70 | 3.71 | -21% |
+| daily | 300s | 10.28 | 12.60 | +23% |
+
+What this says:
+
+- Up to two minutes ahead the model beats persistence on both profiles, by roughly a fifth to a half.
+- At 300 seconds on the compressed daily profile it loses. A 5 minute horizon there covers five simulated hours, and the traffic changes direction inside that window. The horizon should match the lead time scaling needs (pod start plus metric delay), which is why the sample uses 120 seconds.
+- The confidence gate does not separate good forecasts from bad ones. The model is trusted 89% to 96% of the time, including the daily 300 second case where it is worse than persistence, and gating changes the error by a few percent at most. Confidence here measures how well the model fits past data, not whether it will be right next.
+
+These are synthetic results with a simple noise model, not production traffic. Reproduce them with:
+
+```bash
+PYTHONPATH=src python -m forecasting.evaluate --seeds 20 --out evaluation/forecast-accuracy.json
+```
+
+The full output, including standard deviations and library versions, is in `evaluation/forecast-accuracy.json`.
+
 ## Results
 
 Raw output from every run is committed under `load-tests/results/` so the numbers can be checked rather than taken on trust.
@@ -144,7 +176,7 @@ Raw output from every run is committed under `load-tests/results/` so the number
 - **Trend only, no seasonality.** The model extrapolates recent momentum. It can lead a steady climb, but it cannot anticipate a sudden spike it has never seen. Seasonal terms need days of history to learn.
 - **No cooldown window.** Replica counts can move up and down between syncs. The HPA's stabilization window has no equivalent here yet.
 - **No metrics, no scaling.** If Prometheus is unreachable, returns an error, or returns no data, the operator logs a warning and leaves the replica count where it is. It does not scale down on missing data, but it also can't scale up until metrics come back.
-- **Confidence is a heuristic**, as described above.
+- **Confidence is a heuristic and a weak one.** It is an in-sample fit measure, and the accuracy evaluation shows it does not flag the cases where the forecast is worse than just using the current load. Scoring the model on a held-out recent window would be a better signal.
 - **One operator replica.** It runs with `--standalone`, with no leader election, so running two copies would make them fight over the same objects.
 - **Namespace-local targets.** `targetDeployment` is looked up in the `PredictiveScaler`'s own namespace.
 
@@ -153,18 +185,19 @@ Raw output from every run is committed under `load-tests/results/` so the number
 All versions are pinned in `pyproject.toml`. Two are deliberate:
 
 - `kubernetes==35.0.0`: version 36.0.0 was reported to drop the `Authorization` header when using `load_incluster_config()`, which breaks every in-cluster API call ([kubernetes-client/python#2591](https://github.com/kubernetes-client/python/issues/2591)).
-- `pandas==2.3.3`: staying on the 2.x line.
+- `pandas==2.3.3`: staying on the 2.x line rather than moving to 3.0 until statsmodels support is confirmed.
 
 ## Project layout
 
 ```
 src/
   controller/    Kopf handlers, spec/status models, Prometheus client, replica math
-  forecasting/   Holt-Winters forecaster and confidence score
+  forecasting/   Holt-Winters forecaster, confidence score, offline accuracy evaluation
   demo_app/      small FastAPI service with Prometheus metrics, the thing being scaled
 configs/         CRD, RBAC, operator and demo app manifests, kind and Prometheus config
 scripts/         setup.sh, the one-command local cluster
 load-tests/      k6 profiles, recorder, runner, saved results
+evaluation/      saved output of the offline forecast accuracy run
 tests/           unit tests
 ```
 

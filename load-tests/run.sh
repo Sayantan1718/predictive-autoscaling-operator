@@ -15,9 +15,16 @@ case "$LABEL" in
   *) echo "label must be 'predictive' or 'hpa', got '$LABEL'" >&2; exit 1 ;;
 esac
 
-for cmd in k6 kubectl python3; do
+for cmd in k6 kubectl; do
   command -v "$cmd" >/dev/null || { echo "missing required tool: $cmd" >&2; exit 1; }
 done
+
+# Git Bash on Windows usually has `python`, not `python3` (and a Store stub that fails when run)
+PY=""
+for cand in python3 python; do
+  if "$cand" -c 'import sys' >/dev/null 2>&1; then PY="$cand"; break; fi
+done
+[ -n "$PY" ] || { echo "missing required tool: python" >&2; exit 1; }
 
 mkdir -p "$RUN_DIR"
 
@@ -45,10 +52,10 @@ sleep "$WARMUP_SECONDS"
   echo "peak_rps: ${PEAK_RPS:-30}"
   echo "hour_seconds: ${HOUR_SECONDS:-60}"
   echo "k6: $(k6 version | head -1)"
-  echo "kubectl_server: $(kubectl version -o json | python3 -c 'import json,sys; print(json.load(sys.stdin)["serverVersion"]["gitVersion"])')"
+  echo "kubectl_server: $(kubectl version -o json | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["serverVersion"]["gitVersion"])')"
 } > "$RUN_DIR/run-info.txt"
 
-python3 "$ROOT_DIR/load-tests/record.py" --out "$RUN_DIR/replicas.csv" &
+"$PY" "$ROOT_DIR/load-tests/record.py" --out "$RUN_DIR/replicas.csv" &
 RECORDER_PID=$!
 trap 'kill $RECORDER_PID 2>/dev/null || true' EXIT
 
