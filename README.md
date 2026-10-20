@@ -146,7 +146,7 @@ Raw output from every run is committed under `load-tests/results/` so the number
 All versions are pinned in `pyproject.toml`. Two are deliberate:
 
 - `kubernetes==35.0.0`: version 36.0.0 was reported to drop the `Authorization` header when using `load_incluster_config()`, which breaks every in-cluster API call ([kubernetes-client/python#2591](https://github.com/kubernetes-client/python/issues/2591)).
-- `pandas==2.3.3`: staying on the 2.x line rather than moving to 3.0 until statsmodels support is confirmed.
+- `pandas==2.3.3`: staying on the 2.x line rather than moving to 3.0 for the time being.
 
 ## Project layout
 
