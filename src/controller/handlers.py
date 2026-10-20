@@ -17,7 +17,7 @@ GROUP = "autoscaling.predictive-operator.dev"
 VERSION = "v1alpha1"
 PLURAL = "predictivescalers"
 
-PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://prometheus-server.monitoring.svc:9090")
+PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://prometheus-server.monitoring.svc:80")
 HISTORY_WINDOW_SECONDS = int(os.environ.get("HISTORY_WINDOW_SECONDS", "3600"))
 METRIC_STEP_SECONDS = int(os.environ.get("METRIC_STEP_SECONDS", "15"))
 
@@ -64,7 +64,6 @@ def reconcile(
         if elapsed < parsed_spec.sync_period_seconds:
             return  # this object isn't due for another look yet
 
-    points: list[tuple[datetime, float]] = []
     try:
         points = prom_client.query_range(
             parsed_spec.metric_query,
@@ -73,12 +72,21 @@ def reconcile(
             step_seconds=METRIC_STEP_SECONDS,
         )
     except (PrometheusQueryError, requests.RequestException) as err:
-        # can't reach Prometheus - not fatal, forecast_load([]) will report zero
-        # confidence and the scaling decision below falls back to load=0, which
-        # in turn just holds at minReplicas until Prometheus is back
-        logger.warning("prometheus query failed for %s/%s: %s", namespace, name, err)
+        # no data is not the same as zero load: scaling on it during an outage would
+        # drop the deployment to minReplicas at the worst moment, so leave it alone
+        logger.warning(
+            "prometheus query failed for %s/%s, leaving replicas unchanged: %s",
+            namespace, name, err,
+        )
+        return
 
-    current_load = points[-1][1] if points else 0.0
+    if not points:
+        logger.warning(
+            "query returned no data for %s/%s, leaving replicas unchanged", namespace, name
+        )
+        return
+
+    current_load = points[-1][1]
     forecast = forecast_load(points, parsed_spec.forecast_horizon_seconds, METRIC_STEP_SECONDS)
     decision = compute_desired_replicas(parsed_spec, forecast, current_load)
 
