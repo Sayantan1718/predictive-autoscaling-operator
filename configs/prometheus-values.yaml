@@ -11,5 +11,9 @@ prometheus-pushgateway:
   enabled: false
 
 server:
+  # the chart default is 1m, too coarse for a 1m rate() window and a 15s forecast step
+  global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
   persistentVolume:
-    enabled: false
+    enabled: false  # emptyDir is fine for a throwaway local cluster

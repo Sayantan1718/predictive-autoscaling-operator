@@ -7,8 +7,8 @@ spec:
   targetDeployment: demo-app
   minReplicas: 1
   maxReplicas: 10
-  metricQuery: 'rate(demo_app_requests_total[2m])'
-  requestsPerReplica: 5
-  forecastHorizonSeconds: 300  
+  metricQuery: 'sum(rate(demo_app_requests_total[1m]))'
+  requestsPerReplica: 3.5      # ~22 ms CPU per request, aiming at ~80m of the 100m request per pod
+  forecastHorizonSeconds: 300
   confidenceThreshold: 0.6
   syncPeriodSeconds: 30
