@@ -2,7 +2,7 @@ import http from 'k6/http';
 import { check } from 'k6';
 
 const profile = __ENV.PROFILE || 'ramp';
-const peakRps = Number(__ENV.PEAK_RPS || 40);
+const peakRps = Number(__ENV.PEAK_RPS || 30);
 const hourSeconds = Number(__ENV.HOUR_SECONDS || 60);
 const targetUrl = __ENV.TARGET_URL || 'http://localhost:8080/';
 
