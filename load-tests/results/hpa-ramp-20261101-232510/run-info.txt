@@ -1,0 +1,7 @@
+label: hpa
+profile: ramp
+started: 2026-11-01T17:57:11Z
+peak_rps: 30
+hour_seconds: 60
+k6: k6.exe v2.3.0 (commit/e088784614, go1.26.8, windows/amd64)
+kubectl_server: v1.37.0
