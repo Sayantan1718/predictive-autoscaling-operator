@@ -169,12 +169,40 @@ The full output, including standard deviations and library versions, is in `eval
 
 Raw output from every run is committed under `load-tests/results/` so the numbers can be checked rather than taken on trust.
 
-<!-- Add the measured comparison (table + plot) here once the runs are done. Only use numbers from files in load-tests/results/. -->
+### Ramp profile, HPA vs PredictiveScaler
+
+One 15 minute run of each, back to back, same cluster, same demo app, peak 30 requests per second. Replica counts come from `replicas.csv` (sampled every 5 seconds), latency from k6's own summary.
+
+![Replica count over time for the HPA and the PredictiveScaler](docs/ramp-comparison.png)
+
+| Metric | HPA (CPU 80%) | PredictiveScaler |
+|---|---|---|
+| Replica-seconds (cost proxy) | 4460 | 5731 |
+| Max ready replicas | 8 | 10 |
+| Seconds below 3.5 req/s per replica | 604 | 53 |
+| Replica count changes | 7 | 17 |
+| Scale-downs | 0 | 6 |
+| Requests / failed | 15232 / 0 | 15221 / 17 |
+| Median latency | 51 ms | 352 ms |
+| p90 / p95 latency | 1858 / 2024 ms | 1585 / 1750 ms |
+| Max latency | 2822 ms | 22146 ms |
+
+"Below 3.5 req/s per replica" counts the seconds where ready replicas times 3.5 was less than the offered load, using the ramp shape from `traffic.js`. 3.5 is the capacity both controllers were tuned for. The HPA saw no scale-down because its default stabilization window (300 s) is longer than the ramp-down.
+
+What the runs show:
+
+- **It scales ahead.** On the climb the PredictiveScaler stayed above the replica count the load needed, while the HPA trailed it for most of the ramp (604 s below capacity against 53 s).
+- **It costs more.** About 28% more replica-seconds, and it peaked at 10 replicas for a load that needs 9.
+- **It is jumpier.** At about 1 minute, with load around 1.4 req/s, it scaled to 3 and then 4 replicas, then back to 1. At about 13.7 minutes it dropped from 9 to 4 replicas while 28 req/s were still arriving.
+- **Latency did not improve.** The median was worse, the p90 and p95 were slightly better, and the worst request was 22 s with 17 failed requests (0.11%). Four k6 runs exist in total: both HPA runs had zero failures, both predictive runs had some (1 and 17), and the p95 stayed between 1.7 and 2.0 s in all four. Tail latency in this setup is therefore not set by replica count alone. The cause is not isolated. A single-node kind cluster shares one laptop's CPU with k6 and Prometheus, and the abrupt scale-down is a likely source of the failures, but neither has been tested.
+
+These are single runs per controller on one machine, so treat the differences as indications. Two earlier runs without a replica timeline are kept in `load-tests/results/` as well.
 
 ## Limitations
 
 - **Trend only, no seasonality.** The model extrapolates recent momentum. It can lead a steady climb, but it cannot anticipate a sudden spike it has never seen. Seasonal terms need days of history to learn.
-- **No cooldown window.** Replica counts can move up and down between syncs. The HPA's stabilization window has no equivalent here yet.
+- **No cooldown window.** Replica counts can move up and down between syncs. The HPA's stabilization window has no equivalent here yet. In the ramp test this showed up as 17 replica changes against the HPA's 7.
+- **Scale-downs follow the forecast, not the load being served.** When the forecast says traffic will fall, the replica count drops even while current traffic still needs the capacity. In the ramp test it went from 9 to 4 replicas at about 28 req/s.
 - **No metrics, no scaling.** If Prometheus is unreachable, returns an error, or returns no data, the operator logs a warning and leaves the replica count where it is. It does not scale down on missing data, but it also can't scale up until metrics come back.
 - **Confidence is a heuristic and a weak one.** It is an in-sample fit measure, and the accuracy evaluation shows it does not flag the cases where the forecast is worse than just using the current load. Scoring the model on a held-out recent window would be a better signal.
 - **One operator replica.** It runs with `--standalone`, with no leader election, so running two copies would make them fight over the same objects.
