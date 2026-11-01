@@ -59,6 +59,9 @@ sleep "$WARMUP_SECONDS"
 RECORDER_PID=$!
 trap 'kill $RECORDER_PID 2>/dev/null || true' EXIT
 
+sleep 5
+[ -s "$RUN_DIR/replicas.csv" ] || { echo "recorder did not start, aborting before the load test" >&2; exit 1; }
+
 echo "==> running k6 profile=$PROFILE, results in $RUN_DIR"
 PROFILE="$PROFILE" k6 run \
   --summary-export "$RUN_DIR/k6-summary.json" \

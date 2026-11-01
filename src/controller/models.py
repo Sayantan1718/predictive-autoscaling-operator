@@ -40,4 +40,4 @@ class PredictiveScalerStatus(BaseModel):
         self.last_reconcile_time = datetime.now(timezone.utc)
 
     def to_patch_dict(self) -> dict:
-        return self.model_dump(by_alias=True, exclude_none=True)
+        return self.model_dump(mode="json", by_alias=True, exclude_none=True)

@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta
-
+import json
 import kopf
 import pytest
 import requests
@@ -85,6 +85,14 @@ def test_healthy_rising_load_scales_up_and_reports_status(apps, monkeypatch):
     assert call["body"]["spec"]["replicas"] > 1
     assert patch.status["desiredReplicas"] == call["body"]["spec"]["replicas"]
 
+def test_status_patch_can_be_sent_as_json(apps, monkeypatch):
+    serve(monkeypatch, series([2 + 0.3 * i for i in range(60)]))
+
+    patch = reconcile()
+
+    body = json.dumps({"status": dict(patch.status)})  # raised TypeError with a raw datetime
+    assert isinstance(patch.status["lastReconcileTime"], str)
+    assert json.loads(body)["status"]["lastReconcileTime"].endswith(("Z", "+00:00"))
 
 def test_too_little_history_falls_back_to_current_load(apps, monkeypatch):
     serve(monkeypatch, series([3.0, 5.0, 7.0]))  # under MIN_DATA_POINTS
