@@ -107,6 +107,7 @@ def reconcile(
         patch.status[key] = value
 
     logger.info(
-        "%s/%s -> %d replicas | %s",
-        namespace, name, decision.desired_replicas, decision.reason,
+        "%s/%s -> %d replicas (forecast %.1f, current %.1f) | %s",
+        namespace, name, decision.desired_replicas, forecast.predicted_value, current_load,
+        decision.reason,
     )

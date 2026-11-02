@@ -32,9 +32,15 @@ def compute_desired_replicas(
             f"{spec.confidence_threshold:.2f} ({forecast.reason}), using current load"
         )
     else:
-        load_to_use = forecast.predicted_value
+        load_to_use = max(forecast.predicted_value, current_load)
         fallback_active = False
-        reason = f"using forecast: {forecast.reason}"
+        if forecast.predicted_value >= current_load:
+            reason = f"using forecast: {forecast.reason}"
+        else:
+            reason = (
+                f"forecast {forecast.predicted_value:.1f} is below current load "
+                f"{current_load:.1f}, sizing for current load"
+            )
 
     raw_replicas = math.ceil(load_to_use / spec.requests_per_replica)
     desired = max(spec.min_replicas, min(spec.max_replicas, raw_replicas))

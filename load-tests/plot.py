@@ -3,7 +3,9 @@
 Picks the newest run of each controller that has a replicas.csv, so runs from before the
 recorder worked are skipped.
 
-    python load-tests/plot.py --profile ramp --out docs/ramp-comparison.png
+    python load-tests/plot.py --profile ramp --out docs/ramp-120s.png
+
+Pass --hpa and --predictive with result folders to plot older runs instead.
 """
 import argparse
 import csv
@@ -81,9 +83,15 @@ def main() -> None:
     parser.add_argument("--profile", default="ramp", choices=["ramp"])
     parser.add_argument("--capacity", type=float, default=3.5, help="requests/s one replica is sized for")
     parser.add_argument("--out", default="docs/ramp-comparison.png")
+    parser.add_argument("--hpa", type=Path, help="result folder of the HPA run (default: newest)")
+    parser.add_argument("--predictive", type=Path, help="result folder of the predictive run (default: newest)")
+    parser.add_argument("--title", help="plot title (default: the profile name)")
     args = parser.parse_args()
 
-    runs = {label: newest_run(label, args.profile) for label in ("hpa", "predictive")}
+    runs = {
+        "hpa": args.hpa or newest_run("hpa", args.profile),
+        "predictive": args.predictive or newest_run("predictive", args.profile),
+    }
     timelines = {label: read_timeline(run) for label, run in runs.items()}
 
     fig, (top, bottom) = plt.subplots(2, 1, figsize=(9, 6.5), sharex=True, height_ratios=[3, 1.4])
@@ -99,7 +107,7 @@ def main() -> None:
              linewidth=1.2, label=f"needed for the offered load ({args.capacity:g} req/s per replica)")
 
     top.set_ylabel("ready replicas")
-    top.set_title(f"{args.profile} profile: replica count over time")
+    top.set_title(args.title or f"{args.profile} profile: replica count over time")
     top.legend(frameon=False, loc="upper left")
     top.grid(alpha=0.25)
     bottom.set_ylabel("observed req/s\n(1m rate)")

@@ -9,6 +9,6 @@ spec:
   maxReplicas: 10
   metricQuery: 'sum(rate(demo_app_requests_total[1m]))'
   requestsPerReplica: 3.5
-  forecastHorizonSeconds: 300
+  forecastHorizonSeconds: 120
   confidenceThreshold: 0.6
   syncPeriodSeconds: 30
