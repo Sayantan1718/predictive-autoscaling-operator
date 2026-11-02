@@ -1,0 +1,7 @@
+label: hpa
+profile: ramp
+started: 2026-11-02T17:18:03Z
+peak_rps: 30
+hour_seconds: 60
+k6: k6 v2.3.0 (commit/e088784614, go1.27.1, linux/amd64) (docker image grafana/k6:2.3.0)
+kubectl_server: v1.37.0

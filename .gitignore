@@ -29,3 +29,7 @@ Thumbs.db
 # scratch space (load-tests/results is NOT ignored on purpose, the raw runs are the evidence)
 tmp/
 *.log
+
+history.json
+
+operator-decisions.log

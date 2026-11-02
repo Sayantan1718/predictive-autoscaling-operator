@@ -1,4 +1,4 @@
-# lookahead-scaler
+# Predictive Autoscaling Operator
 
 A Kubernetes operator that scales a Deployment ahead of traffic instead of after it. You describe it with a `PredictiveScaler` resource. It reads request-rate history from Prometheus, forecasts a few minutes forward, and sets the replica count for the load that is coming.
 
@@ -232,7 +232,7 @@ Plots come from the saved results: `python load-tests/plot.py --hpa <folder> --p
 All versions are pinned in `pyproject.toml`. Two are deliberate:
 
 - `kubernetes==35.0.0`: version 36.0.0 was reported to drop the `Authorization` header when using `load_incluster_config()`, which breaks every in-cluster API call ([kubernetes-client/python#2591](https://github.com/kubernetes-client/python/issues/2591)).
-- `pandas==2.3.3`: staying on the 2.x line rather than moving to 3.0.
+- `pandas==2.3.3`: staying on the 2.x line rather than moving to 3.0 until statsmodels support is confirmed.
 
 ## Project layout
 

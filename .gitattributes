@@ -1,0 +1,6 @@
+# bash scripts break if Windows converts their line endings to CRLF
+*.sh text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.js text eol=lf
+Dockerfile text eol=lf
