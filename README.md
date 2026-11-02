@@ -1,6 +1,6 @@
-# Predictive Autoscaling Operator
+# lookahead-scaler
 
-A Kubernetes operator that scales a Deployment ahead of traffic instead of after it. It reads request-rate history from Prometheus, forecasts a few minutes forward, and sets the replica count for the load that is coming.
+A Kubernetes operator that scales a Deployment ahead of traffic instead of after it. You describe it with a `PredictiveScaler` resource. It reads request-rate history from Prometheus, forecasts a few minutes forward, and sets the replica count for the load that is coming.
 
 ## The problem
 
@@ -21,7 +21,7 @@ Every sync period, for each `PredictiveScaler`:
 
 1. The controller runs your PromQL query over the last hour in 15 second steps.
 2. A damped-trend Holt-Winters model (statsmodels) forecasts the load `forecastHorizonSeconds` ahead. A confidence score comes from how closely the fitted curve tracked the recent data.
-3. If confidence is at or above `confidenceThreshold`, desired replicas is `ceil(forecast / requestsPerReplica)`. Below it, the same formula runs on the current load, so the operator behaves reactively instead of guessing.
+3. If confidence is at or above `confidenceThreshold`, desired replicas is `ceil(max(forecast, current load) / requestsPerReplica)`. Below it, the same formula runs on the current load, so the operator behaves reactively instead of guessing.
 4. The result is clamped to `[minReplicas, maxReplicas]` and written to the Deployment's `scale` subresource.
 5. The forecast, confidence, chosen replica count and whether the fallback is active are written to the object's `status`.
 
@@ -50,7 +50,7 @@ spec:
 | `minReplicas` / `maxReplicas` | Hard bounds on the replica count | required |
 | `metricQuery` | PromQL returning the load, e.g. requests per second | required |
 | `requestsPerReplica` | Load one replica can handle | required |
-| `forecastHorizonSeconds` | How far ahead to forecast (min 30). Set it near how long a new pod takes to become useful, not higher. | 300 |
+| `forecastHorizonSeconds` | How far ahead to forecast (min 30). Longer adds capacity earlier at higher cost, see Results. The sample uses 120. | 300 |
 | `confidenceThreshold` | Below this, fall back to current load (0 to 1) | 0.6 |
 | `syncPeriodSeconds` | How often to re-evaluate (min 10) | 30 |
 
@@ -68,10 +68,14 @@ spec:
 
 **Least-privilege RBAC.** The ClusterRole covers only `predictivescalers`, `deployments/scale`, events, and read access to CRDs.
 
+## Related work
+
+This is not the first predictive autoscaler for Kubernetes. [predictive-horizontal-pod-autoscaler](https://github.com/jthomperoo/predictive-horizontal-pod-autoscaler) (Apache-2.0) extends the HPA with Holt-Winters and linear regression models and is installed with Helm. This project is a smaller, separate implementation: a Python operator built on Kopf that scales a Deployment through its scale subresource and falls back to current load when the forecast isn't trusted. It was built to learn the operator pattern and to measure the idea against the HPA, not to replace an established project.
+
 ## Requirements
 
 - Docker, [kind](https://kind.sigs.k8s.io/), kubectl, Helm
-- [k6](https://grafana.com/docs/k6/) (load tests only)
+- [k6](https://grafana.com/docs/k6/) (load tests only). If a k6 binary can't be installed or run, `K6_DOCKER=1` runs it from the `grafana/k6` image instead.
 - Python 3.12 (running the tests)
 - A bash shell. On Windows, use Git Bash or WSL2; the scripts won't run in PowerShell.
 
@@ -131,7 +135,7 @@ For a fair comparison, each demo app request burns about 20 ms of CPU (22 ms mea
 Each run removes both controllers, resets the demo app to one replica, enables the chosen one, warms up for two minutes, then records replica counts and request rate every 5 seconds. Everything goes to `load-tests/results/<label>-<profile>-<timestamp>/`:
 
 - `replicas.csv`: spec replicas, ready replicas, observed requests per second over time
-- `run-info.txt`: label, profile, peak rate, k6 and Kubernetes versions
+- `run-info.txt`: label, profile, peak rate, k6 and Kubernetes versions, and for predictive runs the `PredictiveScaler` spec that was applied
 - `k6-summary.json` and `k6-output.txt`: k6's own output
 
 ## Forecast accuracy
@@ -169,42 +173,57 @@ The full output, including standard deviations and library versions, is in `eval
 
 Raw output from every run is committed under `load-tests/results/` so the numbers can be checked rather than taken on trust.
 
-### Ramp profile, HPA vs PredictiveScaler
+Every run is the same 15 minute ramp (2 to 30 requests per second) against the same cluster and demo app, with the HPA and the PredictiveScaler run back to back. Replica counts come from `replicas.csv` (sampled every 5 seconds), latency from k6's own summary. "Seconds below 3.5 req/s per replica" counts the seconds where ready replicas times 3.5 was less than the offered load, using the ramp shape from `traffic.js`; 3.5 is the capacity both controllers were tuned for. The HPA never scaled down inside a run, because its default stabilization window (300 s) is longer than the ramp-down.
 
-One 15 minute run of each, back to back, same cluster, same demo app, peak 30 requests per second. Replica counts come from `replicas.csv` (sampled every 5 seconds), latency from k6's own summary.
+### Shipped setting: 120 s forecast horizon
 
-![Replica count over time for the HPA and the PredictiveScaler](docs/ramp-comparison.png)
+![Replica count over time for the HPA and the PredictiveScaler with a 120 s horizon](docs/ramp-120s.png)
 
 | Metric | HPA (CPU 80%) | PredictiveScaler |
 |---|---|---|
-| Replica-seconds (cost proxy) | 4460 | 5731 |
+| Replica-seconds (cost proxy) | 4498 | 5418 (+20%) |
 | Max ready replicas | 8 | 10 |
-| Seconds below 3.5 req/s per replica | 604 | 53 |
-| Replica count changes | 7 | 17 |
+| Seconds below 3.5 req/s per replica | 620 | 42 |
+| Replica count changes | 7 | 15 |
 | Scale-downs | 0 | 6 |
-| Requests / failed | 15232 / 0 | 15221 / 17 |
-| Median latency | 51 ms | 352 ms |
-| p90 / p95 latency | 1858 / 2024 ms | 1585 / 1750 ms |
-| Max latency | 2822 ms | 22146 ms |
+| Requests / failed | 15235 / 0 | 15235 / 4 |
+| Median latency | 45 ms | 49 ms |
+| p90 / p95 latency | 1611 / 1738 ms | 1735 / 1862 ms |
+| Max latency | 2735 ms | 2787 ms |
 
-"Below 3.5 req/s per replica" counts the seconds where ready replicas times 3.5 was less than the offered load, using the ramp shape from `traffic.js`. 3.5 is the capacity both controllers were tuned for. The HPA saw no scale-down because its default stabilization window (300 s) is longer than the ramp-down.
+With a 120 s horizon the PredictiveScaler stays close to the replica count the load needs, about one step above it, while the HPA trails the climb for most of the ramp. That cost 20% more replica-seconds and **did not improve latency**: the percentiles are within noise of the HPA's.
+
+### Effect of the forecast horizon
+
+The first three predictive runs used a 300 s horizon, because that was the value in the sample file at the time (and the CRD default). The fourth, above, used 120 s. `run-info.txt` records the scaler spec from the fourth run on.
+
+| Run | Horizon | k6 | Replica-seconds (HPA / predictive) | Seconds below capacity | Median ms | p95 ms | Failed |
+|---|---|---|---|---|---|---|---|
+| 1 | 300 s, forecast-only sizing | native | 4460 / 5731 | 604 / 53 | 51 / 352 | 2024 / 1750 | 0 / 17 |
+| 2 | 300 s | native | 4549 / 6099 | 587 / 10 | 175 / 25 | 2122 / 433 | 0 / 8 |
+| 3 | 300 s | Docker | 4650 / 6014 | 511 / 0 | 25 / 169 | 1876 / 975 | 4 / 9 |
+| 4 | 120 s | Docker | 4498 / 5418 | 620 / 42 | 45 / 49 | 1738 / 1862 | 0 / 4 |
+
+Run 1 sized on the forecast alone and scaled down from 9 to 4 replicas while 28 req/s were still arriving. From run 2 on the operator sizes on the larger of the forecast and the current load, so a predicted drop can no longer remove capacity the traffic still needs. Runs 3 and 4 ran k6 from the `grafana/k6` image (`K6_DOCKER=1`) because a native k6 binary was blocked on the test machine, so their network path differs from runs 1 and 2.
 
 What the runs show:
 
-- **It scales ahead.** On the climb the PredictiveScaler stayed above the replica count the load needed, while the HPA trailed it for most of the ramp (604 s below capacity against 53 s).
-- **It costs more.** About 28% more replica-seconds, and it peaked at 10 replicas for a load that needs 9.
-- **It is jumpier.** At about 1 minute, with load around 1.4 req/s, it scaled to 3 and then 4 replicas, then back to 1. At about 13.7 minutes it dropped from 9 to 4 replicas while 28 req/s were still arriving.
-- **Latency did not improve.** The median was worse, the p90 and p95 were slightly better, and the worst request was 22 s with 17 failed requests (0.11%). Four k6 runs exist in total: both HPA runs had zero failures, both predictive runs had some (1 and 17), and the p95 stayed between 1.7 and 2.0 s in all four. Tail latency in this setup is therefore not set by replica count alone. The cause is not isolated. A single-node kind cluster shares one laptop's CPU with k6 and Prometheus, and the abrupt scale-down is a likely source of the failures, but neither has been tested.
+- **The horizon trades cost for lead time.** With 300 s the predictive p95 was lower than the HPA's in all three runs, by 14%, 80% and 48%, at +28% to +34% replica-seconds. With 120 s it was at HPA level for +20%. That is one 120 s run, so the cause is a hypothesis: a shorter horizon may not cover pod start-up, the lag of the 1 minute rate and the 30 s sync period.
+- **The latency gain is not stable.** The predictive p95 ranged from 433 to 1862 ms across the four runs and the HPA's from 1738 to 2122 ms over five runs (a fifth HPA run, with no predictive partner, is also in `load-tests/results/`). The HPA's own median ranged from 23 to 175 ms across those five runs, so median differences between the controllers are within run-to-run variation.
+- **Failed requests.** The PredictiveScaler had failed requests in every run (17, 8, 9 and 4 of about 15,200), the HPA in one (4). Some of the Docker-run failures are 30 s timeouts that also hit the HPA, so part of this is the load generator setup. Scale-downs under load are a candidate for the others, but that has not been tested.
+- **Early blips at low load.** In every run the operator briefly added 1 to 3 replicas around the first minute, while load was about 1 req/s, then released them.
 
-These are single runs per controller on one machine, so treat the differences as indications. Two earlier runs without a replica timeline are kept in `load-tests/results/` as well.
+These are single 15 minute runs on one machine, so treat the differences as indications, not proof. Further runs without a predictive partner or a replica timeline are kept in `load-tests/results/` as well.
+
+Plots come from the saved results: `python load-tests/plot.py --hpa <folder> --predictive <folder> --out docs/<name>.png`. Without `--hpa` and `--predictive` it uses the newest run of each.
 
 ## Limitations
 
 - **Trend only, no seasonality.** The model extrapolates recent momentum. It can lead a steady climb, but it cannot anticipate a sudden spike it has never seen. Seasonal terms need days of history to learn.
-- **No cooldown window.** Replica counts can move up and down between syncs. The HPA's stabilization window has no equivalent here yet. In the ramp test this showed up as 17 replica changes against the HPA's 7.
-- **Scale-downs follow the forecast, not the load being served.** When the forecast says traffic will fall, the replica count drops even while current traffic still needs the capacity. In the ramp test it went from 9 to 4 replicas at about 28 req/s.
+- **No cooldown window.** Replica counts can move up and down between syncs. The HPA's stabilization window has no equivalent here yet. In the ramp tests this showed up as 15 to 17 replica changes against the HPA's 7.
+- **Over-provisioning at low load.** When load first starts to move, the forecast can turn a small change into one to three extra replicas (2 to 3 replicas at about 1 req/s in the runs above). The forecast at those moments is sensitive to small changes in the sampling of the history. The extra replicas are released within a few minutes, but they cost replica-seconds.
 - **No metrics, no scaling.** If Prometheus is unreachable, returns an error, or returns no data, the operator logs a warning and leaves the replica count where it is. It does not scale down on missing data, but it also can't scale up until metrics come back.
-- **Confidence is a heuristic and a weak one.** It is an in-sample fit measure, and the accuracy evaluation shows it does not flag the cases where the forecast is worse than just using the current load. Scoring the model on a held-out recent window would be a better signal.
+- **Confidence is a heuristic and a weak one.** It is an in-sample fit measure, and the accuracy evaluation shows it does not flag the cases where the forecast is worse than just using the current load. Scoring the model on a held-out recent window would be a better signal. It also drops to about half after a ramp-down, because the damped trend forecasts below zero, the value is clamped to 0 and the confidence is halved, so an idle operator alternates between trusting the forecast and falling back.
 - **One operator replica.** It runs with `--standalone`, with no leader election, so running two copies would make them fight over the same objects.
 - **Namespace-local targets.** `targetDeployment` is looked up in the `PredictiveScaler`'s own namespace.
 
@@ -213,7 +232,7 @@ These are single runs per controller on one machine, so treat the differences as
 All versions are pinned in `pyproject.toml`. Two are deliberate:
 
 - `kubernetes==35.0.0`: version 36.0.0 was reported to drop the `Authorization` header when using `load_incluster_config()`, which breaks every in-cluster API call ([kubernetes-client/python#2591](https://github.com/kubernetes-client/python/issues/2591)).
-- `pandas==2.3.3`: staying on the 2.x line rather than moving to 3.0 until statsmodels support is confirmed.
+- `pandas==2.3.3`: staying on the 2.x line rather than moving to 3.0.
 
 ## Project layout
 
